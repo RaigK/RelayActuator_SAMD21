@@ -1,6 +1,3 @@
-//#include <Adafruit_CircuitPlayground.h>
-//#include <Adafruit_Circuit_Playground.h>
-
 // Visual Micro is in vMicro>General>Tutorial Mode
 //
 /*
@@ -9,16 +6,10 @@
 	Author:     TERRAIG2018\Raig
 */
 
-// Define User Types below here or use a .h file
-//
-
-
-// Define Function Prototypes that use User Types below here or use a .h file
-//
 #define __SAMD21G18A__
 
 // Define Functions below here or use other .ino or cpp files
-//
+
 // Enable debug prints to serial monitor
 //#define MY_DEBUG
 #define MY_DEBUG_PRINT
@@ -84,8 +75,8 @@ SeqButton CONTACT1, CONTACT2, KEY_INCLUSION, KEY_OPEN, KEY_CLOSE;
 #define CHILD_ID_SHT2X_TEMP    (CHILD_ID_TEMP_SENSOR + MAX_ATTACHED_DS18B20)
 #define CHILD_ID_SHT2X_HUM     (CHILD_ID_TEMP_SENSOR + MAX_ATTACHED_DS18B20 + 1)
 #define CHILD_ID_SHT2X_DEW     (CHILD_ID_TEMP_SENSOR + MAX_ATTACHED_DS18B20 + 2)
-#define CHILD_ID_RELAY1          (20)
-#define CHILD_ID_RELAY2          (21)
+#define CHILD_ID_RELAY_ON        (20)
+#define CHILD_ID_RELAY_OFF       (21)
 #define CHILD_ID_RELAY_DELAY     (30)
 #define CHILD_ID_RELAY_DELAY     (30)
 #define CHILD_ID_CONTACT1        (40)
@@ -93,7 +84,7 @@ SeqButton CONTACT1, CONTACT2, KEY_INCLUSION, KEY_OPEN, KEY_CLOSE;
 
 
 
-Neotimer mytimer = Neotimer(15000); // x second timer
+Neotimer mytimer = Neotimer(30000); // x second timer
 Neotimer relaytimer1 = Neotimer(); // x relay hold timer
 Neotimer relaytimer2 = Neotimer(); // x relay hold timer
 
@@ -104,8 +95,8 @@ MyMessage msgDelay4(CHILD_ID_RELAY_DELAY, V_VAR4);
 MyMessage msgDelay5(CHILD_ID_RELAY_DELAY, V_VAR5);
 
 MyMessage msgTemp(CHILD_ID_TEMP_SENSOR, V_TEMP);
-MyMessage msgRelay1(CHILD_ID_RELAY1, V_STATUS);
-MyMessage msgRelay2(CHILD_ID_RELAY2, V_STATUS);
+MyMessage msgRelayOn(CHILD_ID_RELAY_ON, V_STATUS);
+MyMessage msgRelayOff(CHILD_ID_RELAY_OFF, V_STATUS);
 MyMessage msgContact1(CHILD_ID_CONTACT1, V_TRIPPED);
 MyMessage msgContact2(CHILD_ID_CONTACT2, V_TRIPPED);
 
@@ -133,10 +124,16 @@ int numSensors = 0;
 bool metric = true;
 DeviceAddress tempDeviceAddress;
 #define TEMPERATURE_PRECISION 12
+struct{
+	int id;
+	DeviceAddress addr;
+} T[MAX_ATTACHED_DS18B20];
 #endif
 
 uint32_t relay_delay[2];
 uint8_t relayCountDown[2];
+bool FirstRun = true;
+
 
 int EEPROM_Write(int pos, char *zeichen, int size);
 int EEPROM_Read(int pos, char *character, int size);
@@ -183,29 +180,22 @@ void before()
 	else {
 		digitalWrite(RELAY_2, EE.Relais2 ? RELAY_ON : RELAY_OFF);
 	}
-
-#ifdef MY_DALLASTEMPERATURE
-	// Startup up the OneWire library
-	//sensors.setResolution(12);
-	//sensors.begin();
-#endif
 }
 
 void setup()
 {
-
-	//start I2C
+//start I2C
 #ifdef MY_SHT2XTEMPERATURE
 	Wire.begin();
 #endif
-	// start serial port
+// start serial port
 	SerialUSB.begin(115200);
-	while (!SerialUSB); // Wait for Serial monitor to open
+//	while (!SerialUSB); // Wait for Serial monitor to open
 
 	CONTACT1.init(contact1, &cb_contact1_true, &cb_contact1_false, false, LOW, 100);
 	CONTACT2.init(contact2, &cb_contact2_true, &cb_contact2_false, false, LOW, 100);
-	KEY_CLOSE.init(key_close, &cb_key_close_true, &cb_key_close_false, false, LOW, 100);
-	KEY_OPEN.init(key_open, &cb_key_open_true, &cb_key_open_false, false, LOW, 100);
+	KEY_CLOSE.init(key_close, &cb_key_close_true, &cb_key_close_false, false, LOW, 50);
+	KEY_OPEN.init(key_open, &cb_key_open_true, &cb_key_open_false, false, LOW, 50);
 	KEY_INCLUSION.init(key_inclusion, &cb_key_inclusion_true, &cb_key_inclusion_false, false, LOW, 100);
 
 
@@ -224,6 +214,7 @@ void setup()
 
 void presentation()
 {
+	char idbuffer[8];
 	// Send the sketch version information to the gateway and Controller
 	sendSketchInfo(Scetch_Info, VERSION);
 	SerialUSB.print(Scetch_Info);
@@ -231,9 +222,9 @@ void presentation()
 	wait(1000);
 
 	// Register all sensors to gw (they will be created as child devices)
-	present(CHILD_ID_RELAY1, S_BINARY, ("Relay"), false);
+	present(CHILD_ID_RELAY_ON, S_BINARY, ("Relay On"));
 	wait(1000);
-	present(CHILD_ID_RELAY2, S_BINARY, ("Relay"), false);
+	present(CHILD_ID_RELAY_OFF, S_BINARY, ("Relay Off"));
 	wait(1000);
 	present(CHILD_ID_RELAY_DELAY, S_CUSTOM, "OnOff relay_delay");
 	wait(1000);
@@ -254,12 +245,14 @@ void presentation()
 	numSensors = sensors.getDeviceCount();
 	// Present all sensors to controller
 	for (int i = 0; i < numSensors && i < MAX_ATTACHED_DS18B20; i++) {
-		present(CHILD_ID_TEMP_SENSOR + i, S_TEMP, ("DEG C"), true);
 		// Search the wire for address
-		if (sensors.getAddress(tempDeviceAddress, i))
+		if (sensors.getAddress(T[i].addr, i))
 		{
+			T[i].id = sensors.getUserData(T[i].addr);
+			//sprintf(idbuffer, "%d", T[i].id);
+			present(CHILD_ID_TEMP_SENSOR + i, S_TEMP, ("DEG C"), true);
 			SerialUSB.print("device ");
-			SerialUSB.print(i, DEC);
+			SerialUSB.print(T[i].id, DEC);
 			SerialUSB.print(" address: ");
 			printAddress(tempDeviceAddress);
 			SerialUSB.println();
@@ -292,15 +285,16 @@ void presentation()
 #endif
 
 	/********************* Timer #3, 16 bit, two PWM outs, period = 65535 */
-	zt3.configure(TC_CLOCK_PRESCALER_DIV16, // prescaler
-		TC_COUNTER_SIZE_16BIT,   // bit width of timer/counter
-		TC_WAVE_GENERATION_NORMAL_PWM // frequency or PWM mode
+	zt3.configure(
+		TC_CLOCK_PRESCALER_DIV64,		// prescaler
+		TC_COUNTER_SIZE_16BIT,			// bit width of timer/counter
+		TC_WAVE_GENERATION_NORMAL_PWM	// frequency or PWM mode
 	);
 
 	zt3.setCompare(0, 0xFFFF / 4);
 	zt3.setCompare(1, 0xFFFF / 2);
-	zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, Timer3Callback0);  // this one sets pin low
-	zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL1, Timer3Callback1);  // this one sets pin high
+	zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, Timer3Callback0);  
+	zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL1, Timer3Callback1);  
 	zt3.enable(true);
 
 
@@ -314,15 +308,24 @@ void loop()
 	//float batteryV = sensorValue * 0.003613281;
 
 	DeviceAddress deviceAddress;
-	if (EE.Delay1 == 0xFFFF) // if Flash reprogrammed the request valu from controller
+	if (EE.Delay1 == 0xFFFF || FirstRun == true) // if Flash reprogrammed then request value from controller
 	{
 		SerialUSB.println("EEPROM is invalid");
 		request(CHILD_ID_RELAY_DELAY, V_VAR1, 0);
 		request(CHILD_ID_RELAY_DELAY, V_VAR2, 0);
+		wait(1000);
+		setRelay(RELAY_1, RELAY_OFF);
+		setRelay(RELAY_2, RELAY_OFF);
 	}
+	else if (FirstRun == true) {
+		setRelay(RELAY_1, EE.Relais1);
+		setRelay(RELAY_2, EE.Relais2);
+	}
+	FirstRun = false;
+
 
 	if (mytimer.repeat()) {
-		SerialUSB.println(" Timer Repeat");
+		SerialUSB.println("Loop Timer Repeat");
 
 #ifdef MyRSSI_Values
 		// retrieve RSSI / SNR reports from incoming ACK
@@ -344,7 +347,6 @@ void loop()
 		send(msgRSSI_TX_PERC.set(transportGetSignalReport(SR_TX_POWER_PERCENT)));
 
 #endif
-		//switch the battery divder on this takes about 3�A
 
 #ifdef MY_DALLASTEMPERATURE
 	// Fetch temperatures from Dallas sensors
@@ -361,25 +363,35 @@ void loop()
 			// Fetch and round temperature to one decimal
 			//temperature = getControllerConfig().isMetric ? sensors.getTempCByIndex(i) : sensors.getTempFByIndex(i);
 			//temperature = sensors.getTempCByIndex(i);
-			readAddress(deviceAddress, i);
-			sensors.requestTemperaturesByAddress(deviceAddress);
-			temperature = sensors.getTempC(deviceAddress);
+			//readAddress(deviceAddress, i);
+			//sensors.requestTemperaturesByAddress(deviceAddress);
+			//temperature = sensors.getTempC(deviceAddress);
+			temperature = sensors.getTempC(T[i].addr);
 			// Send in the new temperature
 			send(msgTemp.setSensor(CHILD_ID_TEMP_SENSOR + i).set(temperature, 2));
+/*
+		for (int id = 0; id < MAX_ATTACHED_DS18B20; id++)
+		{
+			temperature = sensors.getTempCByIndex(id);
+			Serial.print("DS1820 id ");
+			Serial.print(id);
+			Serial.print("Temp C = ");
+			Serial.println(temperature);
+			send(msgTemp.setSensor(CHILD_ID_TEMP_SENSOR + id).set(temperature, 2));
+*/		//}
 
-			//#ifdef MY_DEBUG_PRINT
-			//sensors.getAddress(tempDeviceAddress, i);
+
+#ifdef MY_DEBUG_PRINT
 			printAddress(deviceAddress);
 			SerialUSB.print(".i = ");
 			SerialUSB.print(i);
 			SerialUSB.print(". T = ");
 			SerialUSB.println(temperature, 3);
-			//#endif
+#endif
 		}
 #endif
 
 #ifdef MY_SHT2XTEMPERATURE
-
 		SerialUSB.print("Humidity(%RH): ");
 		send(msgSHT_HUM.setSensor(CHILD_ID_SHT2X_HUM).set(SHT2x.GetHumidity(), 2));
 		SerialUSB.print(SHT2x.GetHumidity());
@@ -389,12 +401,11 @@ void loop()
 		SerialUSB.print("  Dewpoint(C): ");
 		send(msgSHT_DEW.setSensor(CHILD_ID_SHT2X_DEW).set(SHT2x.GetDewPoint(), 2));
 		SerialUSB.println(SHT2x.GetDewPoint());
-
 #endif
-
-	}
+		}
 	send_MyMessage();
 	checkRelayTimer();
+	
 }
 
 void receive(const MyMessage &message)
@@ -410,14 +421,14 @@ void receive(const MyMessage &message)
 #endif
 	// Message check
 	switch (message.sensor) {
-	case CHILD_ID_RELAY1:
+	case CHILD_ID_RELAY_ON:
 		if (message.type == V_STATUS) {
 			setRelay(RELAY_1, message.getBool());
 			SerialUSB.print("RelayID1 = ");
 			SerialUSB.println(message.sensor);
 		};
 		break;
-	case CHILD_ID_RELAY2:
+	case CHILD_ID_RELAY_OFF:
 		if (message.type == V_STATUS) {
 			setRelay(RELAY_2, message.getBool());
 			SerialUSB.print("RelayID2 = ");
@@ -428,12 +439,14 @@ void receive(const MyMessage &message)
 		switch (message.type) {
 		case V_VAR1: {
 			setRelayDelay(RELAY_1, (uint8_t)message.getInt());
+			MSG_State = KEY_OPEN_Off;//switch relay off if delay time is changed
 			SerialUSB.print("RELAY1_DELAY = ");
 			SerialUSB.println((uint8_t)message.getInt());
 		}
 		break;
 		case  V_VAR2: {
 			setRelayDelay(RELAY_2, (uint8_t)message.getInt());
+			MSG_State = KEY_CLOSE_Off; //switch relay off if delay time is changed
 			SerialUSB.print("RELAY2_DELAY = ");
 			SerialUSB.println((uint8_t)message.getInt());
 		}
@@ -442,19 +455,25 @@ void receive(const MyMessage &message)
 	}
 		break;
 	}
-
-	// Write some debug info
 #ifdef MY_DEBUG_INCOMING
 	SerialUSB.print("Incoming change for sensor:");
 	SerialUSB.print(message.sensor);
 	SerialUSB.print(", New status: ");
 	SerialUSB.println(message.getBool());
 #endif
-
-
 }
 
-// function to print a device address
+float getTempByID(int id)
+{
+	for (uint8_t index = 0; index < MAX_ATTACHED_DS18B20; index++)
+	{
+		if (T[index].id == id)
+		{
+			return sensors.getTempC(T[index].addr);
+		}
+	}
+	return -999;
+}
 void printAddress(DeviceAddress deviceAddress)
 {
 	for (uint8_t i = 0; i < 8; i++)
@@ -464,7 +483,6 @@ void printAddress(DeviceAddress deviceAddress)
 	}
 }
 
-// function to write a device address
 void writeAddress(DeviceAddress deviceAddress, uint8_t index)
 {
 	for (uint8_t i = 0; i < 8; i++)
@@ -472,7 +490,7 @@ void writeAddress(DeviceAddress deviceAddress, uint8_t index)
 		EE.listDeviceAddress[i][index] = deviceAddress[i];
 	}
 }
-// function to read a device address
+
 void readAddress(DeviceAddress deviceAddress, uint8_t index)
 {
 	for (uint8_t i = 0; i < 8; i++)
@@ -483,38 +501,56 @@ void readAddress(DeviceAddress deviceAddress, uint8_t index)
 
 void setRelay(uint8_t RelayID, bool relaystate)
 {
+static bool relay_state[2] = { RELAY_OFF, RELAY_OFF };
 	// Change relay state
 	switch (RelayID) {
 	case RELAY_1: {
-		digitalWrite(RelayID, relaystate ? RELAY_ON : RELAY_OFF);
-		send(msgRelay1.setSensor(CHILD_ID_RELAY1).set(int32_t(relaystate)));
-		EE.Relais1 = relaystate;
 		if (relay_delay[0] > 0) {
 			relaytimer1.set(relay_delay[0]);
-			relaytimer1.start();
-			SerialUSB.print("RelayID = ");
-			SerialUSB.println(RelayID);
-			break;
+			if (relaystate) {
+				relaytimer1.start();
+			}
+			//MSG_State = KEY_OPEN_On;
 		}
-	}
+		else {
+			relay_state[0] = !relay_state[0];
+			relaystate = relay_state[0];
+			EE.Relais1 = relaystate;
+			EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE));//store state on non monostable operation
+		}
+		if (relaystate) { 
+			MSG_State = KEY_OPEN_On; 
+		}
+		else {
+			MSG_State = KEY_OPEN_Off;
+		}
+	}   break;
 	case RELAY_2: {
-		digitalWrite(RelayID, relaystate ? RELAY_ON : RELAY_OFF);
-		send(msgRelay2.setSensor(CHILD_ID_RELAY2).set(int32_t(relaystate)));
-		EE.Relais2 = relaystate;
 		if (relay_delay[1] > 0) {
 			relaytimer2.set(relay_delay[1]);
-			relaytimer2.start();
-			SerialUSB.print("RelayID = ");
-			SerialUSB.println(RelayID);
-			break;
+			if (relaystate) {
+				relaytimer2.start();
+			}
 		}
-
+		else {
+			relay_state[1] = !relay_state[1];
+			relaystate = relay_state[1];
+			EE.Relais2 = relaystate;
+			EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE));//store state on non monostable operation
+		}	
+		if (relaystate) {
+			MSG_State = KEY_CLOSE_On;
+		}
+		else {
+			MSG_State = KEY_CLOSE_Off;
+		}
+	}	break;
 	}
-	}
-	// Store state in eeprom
-	//	saveState(RelayID, relaystate);
-	EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE));
-
+	digitalWrite(RelayID, relaystate ? RELAY_ON : RELAY_OFF);
+	SerialUSB.print("Relay State = ");
+	SerialUSB.print(relaystate);
+	SerialUSB.print(" RelayPinID = ");
+	SerialUSB.println(RelayID);
 }
 
 void setRelayDelay(uint8_t RelayID, uint8_t relaydelay)
@@ -524,15 +560,13 @@ void setRelayDelay(uint8_t RelayID, uint8_t relaydelay)
 		relay_delay[0] = relaydelay * 1000;
 		EE.Delay1 = relaydelay; //save delay to NV structure
 		break;
-	}
-
+		}
 	case RELAY_2: {
 		relay_delay[1] = relaydelay * 1000;
 		EE.Delay2 = relaydelay; //save delay to NV structure
 		break;
+		}
 	}
-	}
-	//EE.Delay1 = relaydelay;
 	EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE)); //save the NV structure to EEProm
 
 	SerialUSB.print("relaydelay 1 = ");
@@ -543,19 +577,17 @@ void setRelayDelay(uint8_t RelayID, uint8_t relaydelay)
 
 void checkRelayTimer() {
 	if (relaytimer1.done()) {
-		EE.Relais1 = RELAY_OFF;
+		SerialUSB.println("Timer 1 done...");
 		relaytimer1.stop();
-		digitalWrite(RELAY_1, RELAY_OFF);
-		send(msgRelay1.setSensor(CHILD_ID_RELAY1).set(int32_t(RELAY_OFF)));
+		setRelay(RELAY_1, RELAY_OFF);
+		MSG_State = KEY_OPEN_Off;
 	}
 	if (relaytimer2.done()) {
-		EE.Relais2 = RELAY_OFF;
-		relaytimer2.stop();
-		digitalWrite(RELAY_2, RELAY_OFF);
-		send(msgRelay2.setSensor(CHILD_ID_RELAY2).set(int32_t(RELAY_OFF)));
+		SerialUSB.println("Timer 2 done...");
+		relaytimer2.reset();
+		setRelay(RELAY_2, RELAY_OFF);
+		MSG_State = KEY_CLOSE_Off;
 	}
-	//	EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE));
-	//	SerialUSB.println("Check Relay Timer ");
 }
 
 // Write any data structure or variable to EEPROM
@@ -600,8 +632,8 @@ void Timer3Callback0()
 
 void Timer3Callback1()
 {
-	//SerialUSB.println("Callback 1 ");
-//	digitalWrite(RELAY_1, HIGH);
+//	send_MyMessage();
+//	SerialUSB.println("Callback 1 ");
 }
 
 void cb_contact1_false(SeqButton * button) {
@@ -635,36 +667,34 @@ void cb_key_inclusion_true(SeqButton * button) {
 }
 
 void cb_key_open_false(SeqButton * button) {
-	MSG_State = KEY_OPEN_Off;
 	SerialUSB.println("KEY_OPEN False ");
 }
 
 void cb_key_open_true(SeqButton * button) {
-	MSG_State = KEY_OPEN_On;
+	setRelay(RELAY_1, RELAY_ON);
 	SerialUSB.println("KEY_OPEN True ");
 }
 
 void cb_key_close_false(SeqButton * button) {
-	MSG_State = KEY_CLOSE_Off;
 	SerialUSB.println("KEY CLOSE False ");
 }
 
 void cb_key_close_true(SeqButton * button) {
-	MSG_State = KEY_CLOSE_On;
+	setRelay(RELAY_2, RELAY_ON);
 	SerialUSB.println("KEY CLOSE True ");
 }
 
 void send_MyMessage(/*MSG_STATE MSG_State*/) {
 	switch (MSG_State) {
 	case NoCHANGE: break;
-	case CONTACT1_On: send(msgContact1.set(true)); break;
-	case CONTACT1_Off: send(msgContact1.set(false)); break;
-	case CONTACT2_On: send(msgContact2.set(true)); break;
-	case CONTACT2_Off: send(msgContact2.set(false)); break;
-	case KEY_CLOSE_On: setRelay(RELAY_1, true); break;
-	case KEY_CLOSE_Off: break;
-	case KEY_OPEN_On: setRelay(RELAY_2, true); break;
-	case KEY_OPEN_Off: break;
+	case CONTACT1_On:	send(msgContact1.set(true)); break;
+	case CONTACT1_Off:	send(msgContact1.set(false)); break;
+	case CONTACT2_On:	send(msgContact2.set(true)); break;
+	case CONTACT2_Off:	send(msgContact2.set(false)); break;
+	case KEY_OPEN_On:	send(msgRelayOn.set(true)); break;
+	case KEY_OPEN_Off:	send(msgRelayOn.set(false)); break;
+	case KEY_CLOSE_On:	send(msgRelayOff.set(true)); break;
+	case KEY_CLOSE_Off:	send(msgRelayOff.set(false)); break;
 	}
 	MSG_State = NoCHANGE;
 }
