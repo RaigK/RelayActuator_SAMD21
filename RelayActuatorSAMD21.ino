@@ -1,3 +1,4 @@
+
 // Visual Micro is in vMicro>General>Tutorial Mode
 //
 /*
@@ -6,12 +7,12 @@
 	Author:     TERRAIG2018\Raig
 */
 
-#define __SAMD21G18A__
+//#define __SAMD21G18A__
 
 // Define Functions below here or use other .ino or cpp files
 
 // Enable debug prints to serial monitor
-//#define MY_DEBUG
+#define MY_DEBUG
 #define MY_DEBUG_PRINT
 #define MY_DEBUG_INCOMING
 #include <Boards.h>
@@ -25,7 +26,7 @@
 #define MY_RFM69_ATC_TARGET_RSSI_DBM (-70)  // target RSSI -70dBm
 #define MY_RFM69_MAX_POWER_LEVEL_DBM (10)   // max. TX power 10dBm = 10mW
 #define MY_SENSOR_NETWORK
-#define MY_NODE_ID 103
+//#define MY_NODE_ID 103
 // Enable repeater functionality for this node
 //#define MY_REPEATER_FEATURE
 
@@ -33,9 +34,8 @@
 #define MY_SHT2XTEMPERATURE
 
 #include <Arduino.h>
-//#include <SoftwareSerial.h>
 #include <MySensors.h>
-#include <MyConfig.h>
+//#include <MyConfig.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <SPI.h>
@@ -49,6 +49,7 @@
 
 #define RELAY_1  4  // Arduino Digital I/O pin number for first relay (second on pin+1 etc)
 #define RELAY_2  5  // Arduino Digital I/O pin number for first relay (second on pin+1 etc)
+#define RELAY_3  8  // Arduino Digital I/O pin number for first relay (second on pin+1 etc)
 #define RELAY_ON 1  // GPIO value to write to turn on attached relay
 #define RELAY_OFF 0 // GPIO value to write to turn off attached relay
 
@@ -64,7 +65,7 @@
 enum  BUTTON_F { contact1 = 6, contact2 = 7, key_close = A0, key_open = A1, key_inclusion = A2 };
 enum MSG_STATE {
 	NoCHANGE, CONTACT1_On, CONTACT1_Off, CONTACT2_On, CONTACT2_Off, KEY_INCLUSION_On, KEY_INCLUSION_Off,
-	KEY_OPEN_On, KEY_OPEN_Off, KEY_CLOSE_On, KEY_CLOSE_Off
+	KEY_OPEN_On, KEY_OPEN_Off, KEY_CLOSE_On, KEY_CLOSE_Off, KEY_AUX_On, KEY_AUX_Off
 } MSG_State;
 
 SeqButton CONTACT1, CONTACT2, KEY_INCLUSION, KEY_OPEN, KEY_CLOSE;
@@ -77,7 +78,7 @@ SeqButton CONTACT1, CONTACT2, KEY_INCLUSION, KEY_OPEN, KEY_CLOSE;
 #define CHILD_ID_SHT2X_DEW     (CHILD_ID_TEMP_SENSOR + MAX_ATTACHED_DS18B20 + 2)
 #define CHILD_ID_RELAY_ON        (20)
 #define CHILD_ID_RELAY_OFF       (21)
-#define CHILD_ID_RELAY_DELAY     (30)
+#define CHILD_ID_RELAY_AUX       (22)
 #define CHILD_ID_RELAY_DELAY     (30)
 #define CHILD_ID_CONTACT1        (40)
 #define CHILD_ID_CONTACT2        (41)
@@ -87,6 +88,7 @@ SeqButton CONTACT1, CONTACT2, KEY_INCLUSION, KEY_OPEN, KEY_CLOSE;
 Neotimer mytimer = Neotimer(30000); // x second timer
 Neotimer relaytimer1 = Neotimer(); // x relay hold timer
 Neotimer relaytimer2 = Neotimer(); // x relay hold timer
+Neotimer relaytimer3 = Neotimer(); // x relay hold timer
 
 MyMessage msgDelay1(CHILD_ID_RELAY_DELAY, V_VAR1);
 MyMessage msgDelay2(CHILD_ID_RELAY_DELAY, V_VAR2);
@@ -97,6 +99,7 @@ MyMessage msgDelay5(CHILD_ID_RELAY_DELAY, V_VAR5);
 MyMessage msgTemp(CHILD_ID_TEMP_SENSOR, V_TEMP);
 MyMessage msgRelayOn(CHILD_ID_RELAY_ON, V_STATUS);
 MyMessage msgRelayOff(CHILD_ID_RELAY_OFF, V_STATUS);
+MyMessage msgRelayAux(CHILD_ID_RELAY_AUX, V_STATUS);
 MyMessage msgContact1(CHILD_ID_CONTACT1, V_TRIPPED);
 MyMessage msgContact2(CHILD_ID_CONTACT2, V_TRIPPED);
 
@@ -144,17 +147,22 @@ void setRelay(uint8_t RelayID, bool relaystate);
 void setRelayDelay(uint8_t RelayID, uint8_t relaydelay);
 void checkRelayTimer(void);
 void setup(void);
-void loop(void);
+//void loop(void);
 
-typedef struct EEProm_Struct {
+//typedef 
+struct EEProm_Struct {
+	uint8_t MyNodeID;
 	byte listDeviceAddress[8][4];
 	bool Relais1;
 	bool Relais2;
+	bool Relais3;
 	uint16_t Delay1;
 	uint16_t Delay2;
-} EEProm_Struct;
+	uint16_t Delay3;
+	//} EEProm_Struct;
+} EE;
 
-EEProm_Struct EE;
+//EEProm_Struct EE;
 
 Adafruit_ZeroTimer zt3 = Adafruit_ZeroTimer(3);
 
@@ -167,6 +175,9 @@ void before()
 	EEPROM_Read(0, reinterpret_cast<char*>(&EE), sizeof(EE));
 	relay_delay[0] = EE.Delay1 * 1000;
 	relay_delay[1] = EE.Delay2 * 1000;
+	relay_delay[2] = EE.Delay3 * 1000;
+
+	_transportConfig.nodeId = EE.MyNodeID; //work around of missing EEPROM give back the node ID of first negogtiating from FLASH
 
 	if (relay_delay[0] > 0) {
 		digitalWrite(RELAY_1, RELAY_OFF);
@@ -174,11 +185,19 @@ void before()
 	else {
 		digitalWrite(RELAY_1, EE.Relais1 ? RELAY_ON : RELAY_OFF);
 	}
+
 	if (relay_delay[1] > 0) {
 		digitalWrite(RELAY_2, RELAY_OFF);
 	}
 	else {
 		digitalWrite(RELAY_2, EE.Relais2 ? RELAY_ON : RELAY_OFF);
+	}
+
+	if (relay_delay[2] > 0) {
+		digitalWrite(RELAY_3, RELAY_OFF);
+	}
+	else {
+		digitalWrite(RELAY_3, EE.Relais2 ? RELAY_ON : RELAY_OFF);
 	}
 }
 
@@ -190,6 +209,7 @@ void setup()
 #endif
 // start serial port
 	SerialUSB.begin(115200);
+	while (SerialUSB.available() > 0); // Wait for Serial monitor to open
 //	while (!SerialUSB); // Wait for Serial monitor to open
 
 	CONTACT1.init(contact1, &cb_contact1_true, &cb_contact1_false, false, LOW, 100);
@@ -204,11 +224,7 @@ void setup()
 	// second adc read to get a correct value
 	//sensorValue = 0;//analogRead(BATTERY_SENSE_PIN);
 #endif
-	SerialUSB.print("relaydelay 1 = ");
-	SerialUSB.println(relay_delay[0]);
-	SerialUSB.print("relaydelay 2 = ");
-	SerialUSB.println(relay_delay[1]);
-
+	
 	mytimer.start();
 }
 
@@ -225,6 +241,8 @@ void presentation()
 	present(CHILD_ID_RELAY_ON, S_BINARY, ("Relay On"));
 	wait(1000);
 	present(CHILD_ID_RELAY_OFF, S_BINARY, ("Relay Off"));
+	wait(1000);
+	present(CHILD_ID_RELAY_AUX, S_BINARY, ("Relay Aux"));
 	wait(1000);
 	present(CHILD_ID_RELAY_DELAY, S_CUSTOM, "OnOff relay_delay");
 	wait(1000);
@@ -270,11 +288,20 @@ void presentation()
 			SerialUSB.print(i, DEC);
 			//SerialUSB.print(" but could not detect address. Check power and cabling");
 		}
-		EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE)); //save the NV structure to EEProm
+		//EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE)); //save the NV structure to EEProm
 		wait(1000);
 	}
 #endif
-
+	EE.MyNodeID = getNodeId();
+	EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE)); //save the NV structure to EEProm
+	wait(1000);
+	SerialUSB.print("relaydelay 1 = ");
+	SerialUSB.println(relay_delay[0]);
+	SerialUSB.print("relaydelay 2 = ");
+	SerialUSB.println(relay_delay[1]);
+	SerialUSB.print("My_NODE_ID  = ");
+	SerialUSB.println(EE.MyNodeID);
+	
 #ifdef MY_SHT2XTEMPERATURE
 	present(CHILD_ID_SHT2X_TEMP, S_TEMP, "Temperature_SHT");
 	wait(1000);
@@ -308,18 +335,25 @@ void loop()
 	//float batteryV = sensorValue * 0.003613281;
 
 	DeviceAddress deviceAddress;
-	if (EE.Delay1 == 0xFFFF || FirstRun == true) // if Flash reprogrammed then request value from controller
-	{
+//	if (EE.Delay1 == 0xFFFF || FirstRun == true) // if Flash reprogrammed then request value from controller
+	if (!EEPROM.isValid()) // if Flash reprogrammed then request value from controller
+		{
 		SerialUSB.println("EEPROM is invalid");
 		request(CHILD_ID_RELAY_DELAY, V_VAR1, 0);
+		wait(1000);
 		request(CHILD_ID_RELAY_DELAY, V_VAR2, 0);
+		wait(1000);
+		request(CHILD_ID_RELAY_DELAY, V_VAR3, 0);
 		wait(1000);
 		setRelay(RELAY_1, RELAY_OFF);
 		setRelay(RELAY_2, RELAY_OFF);
+		setRelay(RELAY_3, RELAY_OFF);
 	}
 	else if (FirstRun == true) {
+		SerialUSB.println("First Run is True");
 		setRelay(RELAY_1, EE.Relais1);
 		setRelay(RELAY_2, EE.Relais2);
+		setRelay(RELAY_3, EE.Relais3);
 	}
 	FirstRun = false;
 
@@ -435,6 +469,13 @@ void receive(const MyMessage &message)
 			SerialUSB.println(message.sensor);
 		};
 		break;
+	case CHILD_ID_RELAY_AUX:
+		if (message.type == V_STATUS) {
+			setRelay(RELAY_3, message.getBool());
+			SerialUSB.print("RelayID3 = ");
+			SerialUSB.println(message.sensor);
+		};
+		break;
 	case CHILD_ID_RELAY_DELAY: {
 		switch (message.type) {
 		case V_VAR1: {
@@ -448,6 +489,13 @@ void receive(const MyMessage &message)
 			setRelayDelay(RELAY_2, (uint8_t)message.getInt());
 			MSG_State = KEY_CLOSE_Off; //switch relay off if delay time is changed
 			SerialUSB.print("RELAY2_DELAY = ");
+			SerialUSB.println((uint8_t)message.getInt());
+		}
+		break;
+		case  V_VAR3: {
+			setRelayDelay(RELAY_3, (uint8_t)message.getInt());
+			MSG_State = KEY_AUX_Off; //switch relay off if delay time is changed
+			SerialUSB.print("RELAY3_DELAY = ");
 			SerialUSB.println((uint8_t)message.getInt());
 		}
 		break;
@@ -545,6 +593,26 @@ static bool relay_state[2] = { RELAY_OFF, RELAY_OFF };
 			MSG_State = KEY_CLOSE_Off;
 		}
 	}	break;
+	case RELAY_3: {
+		if (relay_delay[2] > 0) {
+			relaytimer2.set(relay_delay[2]);
+			if (relaystate) {
+				relaytimer3.start();
+			}
+		}
+		else {
+			relay_state[2] = !relay_state[2];
+			relaystate = relay_state[2];
+			EE.Relais3 = relaystate;
+			EEPROM_Write(0, reinterpret_cast<char*>(&EE), sizeof(EE));//store state on non monostable operation
+		}
+		if (relaystate) {
+			MSG_State = KEY_AUX_On;
+		}
+		else {
+			MSG_State = KEY_AUX_Off;
+		}
+	}	break;
 	}
 	digitalWrite(RelayID, relaystate ? RELAY_ON : RELAY_OFF);
 	SerialUSB.print("Relay State = ");
@@ -600,6 +668,8 @@ int EEPROM_Write(int pos, char *zeichen, int size)
 		zeichen++;
 	}
 	EEPROM.commit();
+	SerialUSB.print("After commit, calling isValid() returns ");
+	SerialUSB.println(EEPROM.isValid());
 	return pos + size;
 }
 

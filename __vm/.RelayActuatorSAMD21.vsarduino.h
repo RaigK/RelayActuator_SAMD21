@@ -1,9 +1,10 @@
 /* 
 	Editor: https://www.visualmicro.com/
-			visual micro and the arduino ide ignore this code during compilation. this code is automatically maintained by visualmicro, manual changes to this file will be overwritten
-			the contents of the Visual Micro sketch sub folder can be deleted prior to publishing a project
-			all non-arduino files created by visual micro and all visual studio project or solution files can be freely deleted and are not required to compile a sketch (do not delete your own code!).
-			note: debugger breakpoints are stored in '.sln' or '.asln' files, knowledge of last uploaded breakpoints is stored in the upload.vmps.xml file. Both files are required to continue a previous debug session without needing to compile and upload again
+			This file is for intellisense purpose only.
+			Visual micro (and the arduino ide) ignore this code during compilation. This code is automatically maintained by visualmicro, manual changes to this file will be overwritten
+			The contents of the _vm sub folder can be deleted prior to publishing a project
+			All non-arduino files created by visual micro and all visual studio project or solution files can be freely deleted and are not required to compile a sketch (do not delete your own code!).
+			Note: debugger breakpoints are stored in '.sln' or '.asln' files, knowledge of last uploaded breakpoints is stored in the upload.vmps.xml file. Both files are required to continue a previous debug session without needing to compile and upload again
 	
 	Hardware: SparkFun SAMD21 Mini Breakout, Platform=samd, Package=SparkFun
 */
@@ -13,7 +14,7 @@
 #ifndef _VSARDUINO_H_
 #define _VSARDUINO_H_
 #define F_CPU 48000000L
-#define ARDUINO 10807
+#define ARDUINO 10809
 #define ARDUINO_SAMD_ZERO
 #define ARDUINO_ARCH_SAMD
 #define __SAMD21G18A__
@@ -21,10 +22,13 @@
 #define USB_PID 0x8D21
 #define USBCON
 #define __cplusplus 201103L
-#define __cplusplus 201103L
+//#define __GNUC__ 2
+#define __ARMCC_VERSION 6010050
+
 #define __PTRDIFF_TYPE__ int
 #define __ARM__
 #define __arm__
+#define always_inline
 #define __inline__
 #define __asm__(x)
 #define __attribute__(x)
@@ -35,58 +39,25 @@
 #define __volatile__
 typedef int __SIZE_TYPE__;
 typedef int __builtin_va_list;
+typedef int __builtin_arm_nop;
+typedef int __builtin_arm_wfi;
+typedef int __builtin_arm_wfe;
+typedef int __builtin_arm_sev;
+typedef int __builtin_arm_isb;
+typedef int __builtin_arm_dsb;
+typedef int __builtin_arm_dmb;
+typedef int __builtin_bswap32;
+typedef int __builtin_bswap16;
 #define _Pragma(x)
 #define __ASM
 #define __INLINE
 
-typedef long Sercom;
-#define SERCOM0           ((Sercom   *)0x42000800UL) 
-#define SERCOM1           ((Sercom   *)0x42000800UL) 
-#define SERCOM2           ((Sercom   *)0x42000800UL) 
-#define SERCOM3           ((Sercom   *)0x42000800UL) 
-#define SERCOM4           ((Sercom   *)0x42000800UL) 
-#define SERCOM5           ((Sercom   *)0x42000800UL) 
-typedef long Tcc;
-#define TCC0              ((Tcc      *)0x42002000UL)
-#define TCC1              ((Tcc      *)0x42002000UL)
-#define TCC2              ((Tcc      *)0x42002000UL)
-typedef long Tc;
-#define TC1               ((Tc       *)0x42002C00UL)
-#define TC2               ((Tc       *)0x42003000UL)
-#define TC3               ((Tc       *)0x42003400UL)
-#define TC4               ((Tc       *)0x42003400UL)
-#define TC5               ((Tc       *)0x42003400UL)
-
-typedef long UsbHostDescBank;
-typedef struct {
-	UsbHostDescBank           HostDescBank[2];
-} UsbHostDescriptor;
-
-#define __IO
-#define RoReg8
-#define __I
-#define USB_EPT_NUM
-#define Reserved1[]
-#define Reserved2[]
-#define Reserved3[]
-#define Reserved4[]
-#define Reserved5[]
-#define Reserved6[]
-#define Reserved7[]
-#define Reserved8[]
-#define Reserved9[]
-#define Reserved10[]
-
-#define TC_INST_NUM 999
-#define TCC_INST_NUM 999
+#include "samd.h"
+//#include "samd21/include/samd21.h"
 
 
-#define prog_void
-#define PGM_VOID_P int
 
-typedef unsigned char byte;
-extern "C" void __cxa_pure_virtual() { ; }
-#include <arduino.h>
+#include "arduino.h"
 #include <pins_arduino.h> 
 #include <variant.h> 
 #include <variant.cpp> 
