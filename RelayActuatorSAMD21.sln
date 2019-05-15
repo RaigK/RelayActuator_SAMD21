@@ -4,8 +4,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 16.0.28803.352
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RelayActuatorSAMD21", "RelayActuatorSAMD21.vcxproj", "{F422E40A-945F-495E-A67B-323B55D7C849}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C5F80730-F44F-4478-BDAE-6634EFC2CA88} = {C5F80730-F44F-4478-BDAE-6634EFC2CA88}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EmulateEEPROM", "..\My Examples\EmulateEEPROM\EmulateEEPROM.vcxproj", "{C5F80730-F44F-4478-BDAE-6634EFC2CA88}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Node_Manager_Sensor", "..\Node_Manager_Sensor\Node_Manager_Sensor.vcxproj", "{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,6 +34,12 @@ Global
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|ARM.ActiveCfg = Release|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.ActiveCfg = Release|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.Build.0 = Release|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Debug|ARM.ActiveCfg = Debug|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Debug|x86.ActiveCfg = Debug|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Debug|x86.Build.0 = Debug|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Release|ARM.ActiveCfg = Release|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Release|x86.ActiveCfg = Release|Win32
+		{B52CA978-DFE5-4A7D-BFDD-B6E42AB56FE2}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
